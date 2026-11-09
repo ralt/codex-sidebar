@@ -23,7 +23,7 @@ Put this checkout on `load-path` and bind the entry point:
 
 ```elisp
 (use-package codex-sidebar
-  :load-path "~/Git/gitlab.com/ralt/codex-sidebar"
+  :load-path "~/Git/github.com/ralt/codex-sidebar"
   :commands codex-sidebar-open
   :bind ("C-x c" . codex-sidebar-open))
 ```
@@ -50,7 +50,8 @@ project are independent.
 
 `●` means an Emacs terminal for this chat is still running, not necessarily that
 the model is working. Normal Codex permissions, approvals, model settings, and
-authentication remain in the terminal. Closing a vterm does not delete history.
+authentication remain in the terminal. Exiting Codex automatically kills its
+terminal buffer. Closing a vterm does not delete history.
 Empty tabs stay visible while their terminal is running and disappear when it
 closes. Codex indexes/persists a new
 conversation after its first user message. No prompt is sent by New Chat itself.

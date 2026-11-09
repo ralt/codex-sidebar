@@ -560,7 +560,7 @@ Outside a Projectile project, use the current directory as a temporary project."
 
 (defun codex-sidebar--terminal-sentinel (process event)
   ;; vterm's sentinel reads buffer-local settings, but can be called with an
-  ;; unrelated buffer current.  Keep exited terminals available for diagnostics.
+  ;; unrelated buffer current.  Honor the Codex terminal's exit cleanup setting.
   (when-let ((buffer (process-buffer process)))
     (when (buffer-live-p buffer)
       (with-current-buffer buffer (vterm--sentinel process event)))))
@@ -583,12 +583,12 @@ Outside a Projectile project, use the current directory as a temporary project."
                               codex-sidebar-cli-arguments (unless fresh (list id))))
              (vterm-shell (mapconcat #'shell-quote-argument command " "))
              (vterm-exit-functions (cons #'codex-sidebar--terminal-exit vterm-exit-functions))
-             (vterm-kill-buffer-on-exit nil) (vterm-buffer-name-string nil))
+             (vterm-kill-buffer-on-exit t) (vterm-buffer-name-string nil))
         (pop-to-buffer buffer '((display-buffer-use-some-window display-buffer-pop-up-window)))
         (setq default-directory root)
         (vterm-mode)
         (setq-local codex-sidebar-thread-id id codex-sidebar-project-root root
-                    vterm-kill-buffer-on-exit nil vterm-buffer-name-string nil
+                    vterm-kill-buffer-on-exit t vterm-buffer-name-string nil
                     vterm-exit-functions (cl-adjoin #'codex-sidebar--terminal-exit vterm-exit-functions))
         (set-process-sentinel (get-buffer-process buffer) #'codex-sidebar--terminal-sentinel)
         ;; A very fast server may announce the ID while vterm is initializing.

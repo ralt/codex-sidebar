@@ -152,6 +152,36 @@
               (should (eq opened buffer))))
         (delete-process process) (kill-buffer buffer)))))
 
+(ert-deftest codex-sidebar-exiting-chat-kills-only-its-terminal-buffer ()
+  (require 'vterm)
+  (codex-sidebar-test--isolated
+    (let ((vterm-kill-buffer-on-exit nil)
+          (root (file-name-as-directory directory))
+          buffer process refreshed)
+      (unwind-protect
+          (cl-letf (((symbol-function 'vterm-mode)
+                     (lambda ()
+                       (setq buffer (current-buffer)
+                             process (make-pipe-process :name "codex-exit-test"
+                                                        :buffer buffer :noquery t))))
+                    ((symbol-function 'codex-sidebar--schedule-refresh)
+                     (lambda () (setq refreshed t))))
+            (save-window-excursion
+              (codex-sidebar--open-thread (codex-sidebar-test--thread "exit-id" root))
+              (should (buffer-local-value 'vterm-kill-buffer-on-exit buffer))
+              (setq codex-sidebar--starting (list root))
+              ;; Emacs can invoke the sentinel while an unrelated buffer is current.
+              (with-temp-buffer
+                (delete-process process)
+                (should (buffer-live-p (current-buffer))))
+              (should-not (buffer-live-p buffer))
+              (should-not (codex-sidebar--live-buffer "exit-id"))
+              (should-not codex-sidebar--starting)
+              (should refreshed)
+              (should-not vterm-kill-buffer-on-exit)))
+        (when (process-live-p process) (delete-process process))
+        (when (buffer-live-p buffer) (kill-buffer buffer))))))
+
 (ert-deftest codex-sidebar-new-chat-does-not-start-a-model-turn ()
   (codex-sidebar-test--isolated
     (let (opened method-sent)
