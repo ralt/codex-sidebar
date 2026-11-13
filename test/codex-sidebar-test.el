@@ -22,7 +22,9 @@
           (codex-sidebar--expanded nil) (codex-sidebar--selected nil)
           (codex-sidebar--state-loaded nil) (codex-sidebar--refresh-timer nil)
           (codex-sidebar--refreshing nil) (codex-sidebar--generation 0)
-          (projectile-known-projects nil))
+          (projectile-known-projects nil)
+          (projectile-known-projects-on-file nil)
+          (projectile-known-projects-file (expand-file-name "projects.eld" directory)))
      (unwind-protect (progn ,@body)
        (when (process-live-p codex-sidebar--process)
          (set-process-sentinel codex-sidebar--process #'ignore)
@@ -56,6 +58,78 @@
       (make-directory (expand-file-name ".git" directory))
       (puthash (cons 'none default-directory) 'none projectile-project-root-cache)
       (should-not (plist-get (codex-sidebar--context) :temporary)))))
+
+(ert-deftest codex-sidebar-registers-git-root-from-a-subdirectory ()
+  (codex-sidebar-test--isolated
+    (make-directory (expand-file-name ".git" directory))
+    (let ((subdirectory (expand-file-name "src" directory))
+          (root (abbreviate-file-name (codex-sidebar--directory directory))))
+      (make-directory subdirectory)
+      (codex-sidebar-register-project subdirectory)
+      (codex-sidebar-register-project directory)
+      (should (equal projectile-known-projects (list root)))
+      (setq projectile-known-projects nil)
+      (projectile-load-known-projects)
+      (should (equal projectile-known-projects (list root))))))
+
+(ert-deftest codex-sidebar-registers-worktrees-and-respects-ignored-projects ()
+  (codex-sidebar-test--isolated
+    (with-temp-file (expand-file-name ".git" directory)
+      (insert "gitdir: /unused/main/.git/worktrees/test\n"))
+    (let* ((root (codex-sidebar--directory directory))
+           (projectile-ignored-projects (list root)))
+      (codex-sidebar-register-project directory)
+      (should-not projectile-known-projects)
+      (setq projectile-ignored-projects nil)
+      (codex-sidebar-register-project directory)
+      (should (equal projectile-known-projects (list (abbreviate-file-name root)))))))
+
+(ert-deftest codex-sidebar-does-not-register-ordinary-or-remote-directories ()
+  (codex-sidebar-test--isolated
+    ;; The test runner's temporary parent may itself be a repository.
+    (let ((locate-dominating-stop-dir-regexp
+           (concat "\\`" (regexp-quote (file-name-directory directory)) "\\'")))
+      (codex-sidebar-register-project directory))
+    (cl-letf (((symbol-function 'locate-dominating-file)
+               (lambda (&rest _) (ert-fail "Contacted TRAMP"))))
+      (codex-sidebar-register-project "/ssh:example.invalid:/repo/"))
+    (should-not projectile-known-projects)))
+
+(ert-deftest codex-sidebar-opening-chats-registers-project-without-visiting-files ()
+  (require 'vterm)
+  (codex-sidebar-test--isolated
+    (make-directory (expand-file-name ".git" directory))
+    (let* ((root (codex-sidebar--directory directory))
+           (thread (codex-sidebar-test--thread "register-id" root))
+           (projectile-project-root-cache (make-hash-table :test #'equal))
+           buffer process)
+      ;; Registration must work even if the directory was visited before git init.
+      (puthash (cons 'none root) 'none projectile-project-root-cache)
+      (unwind-protect
+          (cl-letf (((symbol-function 'vterm-mode)
+                     (lambda ()
+                       (setq buffer (current-buffer)
+                             process (make-pipe-process :name "codex-register-test"
+                                                        :buffer buffer :noquery t))))
+                    ((symbol-function 'codex-sidebar--render) #'ignore))
+            (save-window-excursion
+              (dolist (fresh '(t nil))
+                (codex-sidebar--open-thread thread fresh)
+                (should (member (abbreviate-file-name root) projectile-known-projects))
+                (should-not (buffer-file-name buffer))
+                (set-process-sentinel process #'ignore)
+                (delete-process process)
+                (kill-buffer buffer)
+                (projectile-remove-known-project (abbreviate-file-name root)))
+              (codex-sidebar--open-thread thread)
+              (projectile-remove-known-project (abbreviate-file-name root))
+              ;; Reusing a live terminal must run the hook too.
+              (codex-sidebar--open-thread thread)
+              (should (member (abbreviate-file-name root) projectile-known-projects))))
+        (when (process-live-p process)
+          (set-process-sentinel process #'ignore)
+          (delete-process process))
+        (when (buffer-live-p buffer) (kill-buffer buffer))))))
 
 (ert-deftest codex-sidebar-state-survives-restart-without-transcripts ()
   (codex-sidebar-test--isolated

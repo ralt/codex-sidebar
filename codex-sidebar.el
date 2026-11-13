@@ -41,6 +41,11 @@
 (defcustom codex-sidebar-state-file (locate-user-emacs-file "codex-sidebar-state.eld")
   "File holding selected/temporary projects and expanded groups, not chat history."
   :type 'file)
+(defcustom codex-sidebar-project-open-hook '(codex-sidebar-register-project)
+  "Hook run after opening a new, resumed, or already running chat.
+Each function receives the chat directory as its only argument.
+By default, register its Git repository in Projectile's known projects."
+  :type 'hook)
 
 (defface codex-sidebar-project-face '((t :inherit font-lock-keyword-face :weight bold))
   "Project heading face.")
@@ -565,6 +570,14 @@ Outside a Projectile project, use the current directory as a temporary project."
     (when (buffer-live-p buffer)
       (with-current-buffer buffer (vterm--sentinel process event)))))
 
+(defun codex-sidebar-register-project (directory)
+  "Add DIRECTORY's enclosing Git repository to Projectile's known projects.
+Ordinary directories are left alone.  A Git worktree's .git file also
+counts as a repository, and Projectile's ignored projects are respected."
+  (unless (file-remote-p directory)
+    (when-let ((root (locate-dominating-file directory ".git")))
+      (projectile-add-known-project (codex-sidebar--directory root)))))
+
 (defun codex-sidebar--open-thread (thread &optional fresh)
   (require 'vterm)
   (let* ((id (codex-sidebar--get thread "id"))
@@ -595,6 +608,7 @@ Outside a Projectile project, use the current directory as a temporary project."
         (setq id (gethash "id" thread))
         (setq codex-sidebar-thread-id id)
         (puthash id buffer codex-sidebar--terminals)))
+    (run-hook-with-args 'codex-sidebar-project-open-hook root)
     (codex-sidebar--render)))
 
 (defun codex-sidebar-new-chat (&optional root)

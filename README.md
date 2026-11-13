@@ -34,6 +34,10 @@ a live chat reuses its buffer; selecting a closed chat resumes its saved ID in a
 new vterm. Buffers are identified by chat ID, so multiple conversations in one
 project are independent.
 
+Opening a new, resumed, or already running chat automatically adds its enclosing
+Git repository to Projectile, so it appears in your project switcher even if you
+never open a file. Ordinary directories are left alone; Git worktrees are supported.
+
 ## Sidebar keys
 
 | Key | Action |
@@ -68,6 +72,9 @@ another client may need a refresh. The default history limit is 500 chats.
 - `codex-sidebar-width`: sidebar columns (default 42).
 - `codex-sidebar-history-limit` and `codex-sidebar-recent-count`: history size.
 - `codex-sidebar-request-timeout`: metadata RPC deadline.
+- `codex-sidebar-project-open-hook`: functions called with the chat directory
+  after opening a chat. Defaults to `codex-sidebar-register-project`; set it to
+  `nil` to disable automatic Projectile registration.
 - `codex-sidebar-state-file`: project/group state, defaulting to
   `~/.emacs.d/codex-sidebar-state.eld`. It does not contain transcripts or tokens.
 - `codex-sidebar-server-arguments`: metadata server invocation, if your CLI
